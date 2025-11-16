@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <linux/unistd.h>
 #include <array>
+#include <string>
 
 void hack_start(const char *game_data_dir) {
     bool load = false;
@@ -112,8 +113,14 @@ struct NativeBridgeCallbacks {
 };
 
 bool NativeBridgeLoad(const char *game_data_dir, int api_level, void *data, size_t length) {
-    //TODO 等待houdini初始化
+    // Wait for native bridge (houdini/libndk) to initialize
     sleep(5);
+
+    // If no payload provided, skip NB path to avoid crashes
+    if (data == nullptr || length == 0) {
+        LOGW("No ARM payload provided; skip NativeBridgeLoad");
+        return false;
+    }
 
     auto libart = dlopen("libart.so", RTLD_NOW);
     auto JNI_GetCreatedJavaVMs = (jint (*)(JavaVM **, jsize, jsize *)) dlsym(libart,
@@ -192,6 +199,13 @@ void hack_prepare(const char *game_data_dir, void *data, size_t length) {
     LOGI("api level: %d", api_level);
 
 #if defined(__i386__) || defined(__x86_64__)
+    // If libndk translation is active, skip NativeBridgeLoad to avoid crashes
+    auto nb_lib = GetNativeBridgeLibrary();
+    if (!nb_lib.empty() && nb_lib.find("libndk_translation") != std::string::npos) {
+        LOGI("libndk translation detected; skipping NativeBridgeLoad");
+        hack_start(game_data_dir);
+        return;
+    }
     if (!NativeBridgeLoad(game_data_dir, api_level, data, length)) {
 #endif
         hack_start(game_data_dir);
