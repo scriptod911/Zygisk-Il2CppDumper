@@ -199,19 +199,13 @@ void hack_prepare(const char *game_data_dir, void *data, size_t length) {
     LOGI("api level: %d", api_level);
 
 #if defined(__i386__) || defined(__x86_64__)
-    // If libndk translation is active, skip NativeBridgeLoad to avoid crashes
-    auto nb_lib = GetNativeBridgeLibrary();
-    if (!nb_lib.empty() && nb_lib.find("libndk_translation") != std::string::npos) {
-        LOGI("libndk translation detected; skipping NativeBridgeLoad");
-        hack_start(game_data_dir);
-        return;
-    }
-    if (!NativeBridgeLoad(game_data_dir, api_level, data, length)) {
+    // On Waydroid x86/x86_64, avoid NativeBridgeLoad entirely to reduce crash risk
+    // and start dumping as soon as libil2cpp is available.
+    LOGI("Skipping NativeBridge on x86/x86_64; proceeding with direct dump");
+    hack_start(game_data_dir);
+    return;
 #endif
-        hack_start(game_data_dir);
-#if defined(__i386__) || defined(__x86_64__)
-    }
-#endif
+    hack_start(game_data_dir);
 }
 
 #if defined(__arm__) || defined(__aarch64__)
