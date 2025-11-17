@@ -113,7 +113,7 @@ struct NativeBridgeCallbacks {
 };
 
 bool NativeBridgeLoad(const char *game_data_dir, int api_level, void *data, size_t length) {
-    // Wait for native bridge (houdini/libndk) to initialize
+    // Wait briefly for native bridge (houdini/libndk)
     sleep(8);
 
     // If no payload provided, skip NB path to avoid crashes
@@ -122,30 +122,19 @@ bool NativeBridgeLoad(const char *game_data_dir, int api_level, void *data, size
         return false;
     }
 
-    auto libart = dlopen("libart.so", RTLD_NOW);
-    auto JNI_GetCreatedJavaVMs = (jint (*)(JavaVM **, jsize, jsize *)) dlsym(libart,
-                                                                             "JNI_GetCreatedJavaVMs");
-    LOGI("JNI_GetCreatedJavaVMs %p", JNI_GetCreatedJavaVMs);
-    JavaVM *vms_buf[1];
-    JavaVM *vms;
-    jsize num_vms;
-    jint status = JNI_GetCreatedJavaVMs(vms_buf, 1, &num_vms);
-    if (status == JNI_OK && num_vms > 0) {
-        vms = vms_buf[0];
-    } else {
-        LOGE("GetCreatedJavaVMs error");
-        return false;
-    }
-
-    auto lib_dir = GetLibDir(vms);
-    if (lib_dir.empty()) {
-        LOGE("GetLibDir error");
-        return false;
-    }
-    if (lib_dir.find("/lib/x86") != std::string::npos) {
-        LOGI("no need NativeBridge");
-        munmap(data, length);
-        return false;
+    // JavaVM is optional for our JNI_OnLoad; pass nullptr if we can't resolve it
+    JavaVM *vms = nullptr;
+    void *libart = dlopen("libart.so", RTLD_NOW);
+    if (libart) {
+        auto JNI_GetCreatedJavaVMs = (jint (*)(JavaVM **, jsize, jsize *)) dlsym(libart, "JNI_GetCreatedJavaVMs");
+        LOGI("JNI_GetCreatedJavaVMs %p", JNI_GetCreatedJavaVMs);
+        if (JNI_GetCreatedJavaVMs) {
+            JavaVM *vms_buf[1];
+            jsize num_vms = 0;
+            if (JNI_GetCreatedJavaVMs(vms_buf, 1, &num_vms) == JNI_OK && num_vms > 0) {
+                vms = vms_buf[0];
+            }
+        }
     }
 
     auto nb = dlopen("libhoudini.so", RTLD_NOW);
