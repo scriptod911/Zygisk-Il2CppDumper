@@ -20,7 +20,7 @@
 
 void hack_start(const char *game_data_dir) {
     bool load = false;
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 60; i++) {
         void *handle = xdl_open("libil2cpp.so", 0);
         if (handle) {
             load = true;
@@ -114,7 +114,7 @@ struct NativeBridgeCallbacks {
 
 bool NativeBridgeLoad(const char *game_data_dir, int api_level, void *data, size_t length) {
     // Wait for native bridge (houdini/libndk) to initialize
-    sleep(5);
+    sleep(8);
 
     // If no payload provided, skip NB path to avoid crashes
     if (data == nullptr || length == 0) {
@@ -199,10 +199,16 @@ void hack_prepare(const char *game_data_dir, void *data, size_t length) {
     LOGI("api level: %d", api_level);
 
 #if defined(__i386__) || defined(__x86_64__)
-    // On Waydroid x86/x86_64, avoid NativeBridgeLoad entirely to reduce crash risk
-    // and start dumping as soon as libil2cpp is available.
-    LOGI("Skipping NativeBridge on x86/x86_64; proceeding with direct dump");
-    hack_start(game_data_dir);
+    // On x86/x86_64: prefer NB with libhoudini, skip NB if libndk_translation is active
+    auto nb_lib = GetNativeBridgeLibrary();
+    if (!nb_lib.empty() && nb_lib.find("libndk_translation") != std::string::npos) {
+        LOGI("libndk translation detected; skipping NativeBridgeLoad");
+        hack_start(game_data_dir);
+        return;
+    }
+    if (!NativeBridgeLoad(game_data_dir, api_level, data, length)) {
+        hack_start(game_data_dir);
+    }
     return;
 #endif
     hack_start(game_data_dir);
